@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import {
   Layers,
   RotateCcw,
   ArrowUpRight,
   HelpCircle,
   Leaf,
+  Undo2,
+  Redo2,
 } from "lucide-vue-next";
 import { createDocument } from "../shared/document";
-import { PaperPanel, papers, replacePaper } from "../features/paper";
+import {
+  PaperPanel,
+  papers,
+  replacePaper,
+  setMaterial,
+  setTexture,
+} from "../features/paper";
 import {
   CreasePanel,
   selectCrease,
@@ -31,10 +39,12 @@ import {
   usePlayer,
 } from "../features/sequence";
 import { Viewport, ObservePanel, setView } from "../features/observe";
+import { useHistory } from "../features/history";
 const doc = reactive(createDocument(papers[0]!, makeSteps(papers[0]!)));
 const pose = computed(() => solvePose(doc.paper, doc.angles)),
   hinges = computed(() => hingePositions(doc.paper, pose.value));
 const { toggle } = usePlayer(doc);
+const history = useHistory(doc);
 const help = ref(false),
   toast = ref("");
 function notify(s: string) {
@@ -44,21 +54,74 @@ function notify(s: string) {
 function choosePaper(id: string) {
   const p = papers.find((p) => p.id === id);
   if (p) {
-    replacePaper(doc, p);
-    doc.steps = makeSteps(p);
+    // 纸张身份、选中折痕与步骤作为一个整体入历史，撤销可完整恢复旧纸结构。
+    history.mutate(
+      "切换纸张 · " + p.name,
+      ["paper", "selected", "angles", "directions", "steps", "step"],
+      () => {
+        replacePaper(doc, p);
+        doc.steps = makeSteps(p);
+      },
+    );
     setView(doc, "iso");
   }
 }
 function reset() {
-  flatten(doc);
-  doc.steps = makeSteps(doc.paper);
+  history.mutate("重新开始", ["angles", "steps", "step"], () => {
+    flatten(doc);
+    doc.steps = makeSteps(doc.paper);
+  });
   setView(doc, "iso");
   notify("已回到平展纸张");
 }
 function capture() {
-  captureStep(doc);
+  history.mutate("保存当前步骤", ["steps"], () => captureStep(doc));
   notify("当前形态已保存到步骤 " + (doc.step + 1));
 }
+function onAngle(value: number) {
+  history.mutate("调整折叠角度", ["angles"], () => changeAngle(doc, value));
+}
+function onDirection() {
+  history.mutate("切换折叠方向", ["directions", "angles"], () =>
+    toggleDirection(doc),
+  );
+}
+function onTarget() {
+  history.mutate("折至建议角度", ["angles"], () => applyTarget(doc));
+}
+function onMaterial(front: string, back: string) {
+  history.mutate("调整纸张颜色", ["front", "back"], () =>
+    setMaterial(doc, front, back),
+  );
+}
+function onTexture(texture: string) {
+  history.mutate("调整表面纹理", ["texture"], () =>
+    setTexture(doc, texture),
+  );
+}
+function onKeydown(e: KeyboardEvent) {
+  const el = e.target as HTMLElement | null;
+  const editable =
+    el &&
+    (el.isContentEditable ||
+      el.tagName === "TEXTAREA" ||
+      (el.tagName === "INPUT" &&
+        !["range", "checkbox", "radio", "button"].includes(
+          (el as HTMLInputElement).type,
+        )));
+  if (editable || !(e.ctrlKey || e.metaKey)) return;
+  const key = e.key.toLowerCase();
+  if (key === "z") {
+    e.preventDefault();
+    if (e.shiftKey) history.redo();
+    else history.undo();
+  } else if (key === "y") {
+    e.preventDefault();
+    history.redo();
+  }
+}
+onMounted(() => window.addEventListener("keydown", onKeydown));
+onUnmounted(() => window.removeEventListener("keydown", onKeydown));
 </script>
 <template>
   <div class="workspace">
@@ -72,6 +135,33 @@ function capture() {
         <span class="local-badge">本次会话</span>
       </nav>
       <div class="header-actions">
+        <div class="history-controls">
+          <button
+            class="icon-button"
+            aria-label="撤销"
+            :disabled="!history.canUndo.value"
+            :title="
+              history.canUndo.value
+                ? '撤销：' + history.undoLabel.value + '（Ctrl/⌘+Z）'
+                : '没有可撤销的操作'
+            "
+            @click="history.undo()"
+          >
+            <Undo2 :size="18" /></button
+          ><button
+            class="icon-button"
+            aria-label="重做"
+            :disabled="!history.canRedo.value"
+            :title="
+              history.canRedo.value
+                ? '重做：' + history.redoLabel.value + '（Ctrl/⌘+Shift+Z）'
+                : '没有可重做的操作'
+            "
+            @click="history.redo()"
+          >
+            <Redo2 :size="18" />
+          </button>
+        </div>
         <button class="icon-button" aria-label="帮助" @click="help = !help">
           <HelpCircle :size="18" /></button
         ><button class="reset" @click="reset">
@@ -94,7 +184,12 @@ function capture() {
       </div>
       <div class="studio">
         <aside class="left-sidebar">
-          <PaperPanel :doc="doc" @paper="choosePaper" /><CreasePanel
+          <PaperPanel
+            :doc="doc"
+            @paper="choosePaper"
+            @material="onMaterial"
+            @texture="onTexture"
+          /><CreasePanel
             :doc="doc"
             @select="selectCrease(doc, $event)"
           />
@@ -142,9 +237,11 @@ function capture() {
           </div>
           <FoldPanel
             :doc="doc"
-            @angle="changeAngle(doc, $event)"
-            @direction="toggleDirection(doc)"
-            @target="applyTarget(doc)"
+            @angle="onAngle"
+            @angle-begin="history.begin('调整折叠角度', ['angles'])"
+            @angle-end="history.end()"
+            @direction="onDirection"
+            @target="onTarget"
           /><ObservePanel :doc="doc" />
         </aside>
       </div>
@@ -173,6 +270,10 @@ function capture() {
         </p>
         <p>
           下方步骤可还原对应形态，也可保存当前角度后播放。拖动画面旋转视角，滚轮缩放，下载按钮可保存当前观察图。
+        </p>
+        <p>
+          折错了不必重来：Ctrl/⌘+Z 撤销、Ctrl/⌘+Shift+Z
+          重做，纸张、折向、步骤与材质的调整都可以回退。播放中的形态只是临时观察，不计入历史。
         </p>
         <p>作品保留在本次会话中，刷新会重新开始。</p>
         <button class="primary" @click="help = false">开始探索 ↗</button>

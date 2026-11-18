@@ -11,3 +11,6 @@ export function setMaterial(doc: Document, front: string, back: string) {
   doc.front = front;
   doc.back = back;
 }
+export function setTexture(doc: Document, texture: string) {
+  doc.texture = texture;
+}

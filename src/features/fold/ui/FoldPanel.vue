@@ -2,7 +2,13 @@
 import { computed } from "vue";
 import type { Document } from "../../../shared/types";
 import { angleHint } from "../lib/angle";
-defineEmits<{ angle: [value: number]; direction: []; target: [] }>();
+defineEmits<{
+  angle: [value: number];
+  angleBegin: [];
+  angleEnd: [];
+  direction: [];
+  target: [];
+}>();
 const p = defineProps<{ doc: Document }>();
 const angle = computed(() => p.doc.angles[p.doc.selected] ?? 0);
 </script>
@@ -20,6 +26,10 @@ const angle = computed(() => p.doc.angles[p.doc.selected] ?? 0);
       max="175"
       :value="angle"
       @input="$emit('angle', Number(($event.target as HTMLInputElement).value))"
+      @pointerdown="$emit('angleBegin')"
+      @pointerup="$emit('angleEnd')"
+      @pointercancel="$emit('angleEnd')"
+      @change="$emit('angleEnd')"
     />
     <div class="range-labels">
       <span>−175°</span><span>0°</span><span>175°</span>

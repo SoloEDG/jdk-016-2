@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { Document } from "../../../shared/types";
 import { papers, swatches } from "../lib/presets";
-import { setMaterial } from "../model/paper";
 defineProps<{ doc: Document }>();
-defineEmits<{ paper: [id: string] }>();
+defineEmits<{
+  paper: [id: string];
+  material: [front: string, back: string];
+  texture: [value: string];
+}>();
 </script>
 <template>
   <section class="panel">
@@ -33,11 +36,15 @@ defineEmits<{ paper: [id: string] }>();
         :aria-label="s.name"
         :style="{ background: s.front }"
         :class="{ chosen: doc.front === s.front }"
-        @click="setMaterial(doc, s.front, s.back)"
+        @click="$emit('material', s.front, s.back)"
       ></button>
     </div>
     <label class="field-label">表面纹理</label
-    ><select v-model="doc.texture" aria-label="表面纹理">
+    ><select
+      :value="doc.texture"
+      aria-label="表面纹理"
+      @change="$emit('texture', ($event.target as HTMLSelectElement).value)"
+    >
       <option value="fiber">手工纤维纸</option>
       <option value="dots">细点纹理</option>
       <option value="plain">纯色纸</option>

@@ -136,6 +136,32 @@ a {
 .icon-button {
   color: #8a9485;
 }
+.history-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #e3e7dd;
+  border-radius: 8px;
+  background: #fafbf7;
+}
+.history-controls .icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #5c6b58;
+}
+.history-controls .icon-button:hover:not(:disabled) {
+  background: #eef1e8;
+  color: #3c5543;
+}
+.history-controls .icon-button:disabled {
+  color: #c3cabd;
+  cursor: default;
+}
 main {
   max-width: 1580px;
   margin: auto;
